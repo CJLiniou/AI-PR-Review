@@ -2,7 +2,7 @@ import os
 import re
 import httpx
 
-from .models import PRInfo, FileChange
+from .models import FileChange, GitHubPullRequest, GitHubUser, PRInfo
 from .parser import parse_file_change, parse_github_pr_url
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -44,6 +44,30 @@ class GitHubClient:
             response = client.get(url, headers=self._headers, params=params)
             response.raise_for_status()
             return response.json()
+
+    def get_pull_request(self, owner: str, repo: str, pull_number: int) -> GitHubPullRequest:
+        pr_data = self._get(f"repos/{owner}/{repo}/pulls/{pull_number}")
+
+        user_data = pr_data.get("user") or {}
+        base_data = pr_data.get("base") or {}
+        head_data = pr_data.get("head") or {}
+
+        return GitHubPullRequest(
+            number=pr_data.get("number", pull_number),
+            title=pr_data.get("title", ""),
+            body=pr_data.get("body"),
+            state=pr_data.get("state", ""),
+            html_url=pr_data.get("html_url", ""),
+            user=GitHubUser(
+                login=user_data.get("login", ""),
+                html_url=user_data.get("html_url", ""),
+            ),
+            base_branch=base_data.get("ref", ""),
+            head_branch=head_data.get("ref", ""),
+            head_sha=head_data.get("sha", ""),
+            created_at=pr_data.get("created_at", ""),
+            updated_at=pr_data.get("updated_at", ""),
+        )
 
     def fetch_pr(self, pr_url: str) -> PRInfo:
         owner, repo, number = self.parse_pr_url(pr_url)

@@ -1,4 +1,5 @@
 from ai_pr_review.github.client import GITHUB_API_BASE, GitHubClient
+from ai_pr_review.github.models import GitHubPullRequest, GitHubUser
 
 
 class FakeResponse:
@@ -77,3 +78,52 @@ def test_get_without_token_does_not_raise_or_send_authorization(monkeypatch):
 
     assert result == {"ok": True}
     assert "Authorization" not in FakeHttpxClient.calls[0]["headers"]
+
+
+def test_get_pull_request_returns_mapped_model(monkeypatch):
+    calls = []
+    mock_pr_json = {
+        "number": 123,
+        "title": "Add GitHub PR support",
+        "body": "Fetches pull request metadata.",
+        "state": "open",
+        "html_url": "https://github.com/owner/repo/pull/123",
+        "user": {
+            "login": "octocat",
+            "html_url": "https://github.com/octocat",
+        },
+        "base": {
+            "ref": "main",
+        },
+        "head": {
+            "ref": "feature/pr-support",
+            "sha": "abc123",
+        },
+        "created_at": "2026-05-30T00:00:00Z",
+        "updated_at": "2026-05-30T01:00:00Z",
+    }
+
+    def fake_get(self, path, params=None):
+        calls.append({"path": path, "params": params})
+        return mock_pr_json
+
+    monkeypatch.setattr(GitHubClient, "_get", fake_get)
+
+    client = GitHubClient(github_token="")
+    pull_request = client.get_pull_request("owner", "repo", 123)
+
+    assert calls == [{"path": "repos/owner/repo/pulls/123", "params": None}]
+    assert isinstance(pull_request, GitHubPullRequest)
+    assert pull_request.number == 123
+    assert pull_request.title == "Add GitHub PR support"
+    assert pull_request.body == "Fetches pull request metadata."
+    assert pull_request.state == "open"
+    assert pull_request.html_url == "https://github.com/owner/repo/pull/123"
+    assert isinstance(pull_request.user, GitHubUser)
+    assert pull_request.user.login == "octocat"
+    assert pull_request.user.html_url == "https://github.com/octocat"
+    assert pull_request.base_branch == "main"
+    assert pull_request.head_branch == "feature/pr-support"
+    assert pull_request.head_sha == "abc123"
+    assert pull_request.created_at == "2026-05-30T00:00:00Z"
+    assert pull_request.updated_at == "2026-05-30T01:00:00Z"
