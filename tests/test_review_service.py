@@ -6,6 +6,7 @@ from ai_pr_review.ai.summarizer import PRSummarizer
 from ai_pr_review.github.client import GitHubClient
 from ai_pr_review.github.models import (
     GitHubChangedFile,
+    GitHubCommit,
     GitHubPullRequest,
     GitHubUser,
 )
@@ -53,11 +54,29 @@ def _mock_files() -> list[GitHubChangedFile]:
     ]
 
 
+def _mock_commits() -> list[GitHubCommit]:
+    return [
+        GitHubCommit(
+            sha="abc123",
+            message="fix: auth bug",
+            author_name="alice",
+            author_email="a@test.com",
+        ),
+        GitHubCommit(
+            sha="def456",
+            message="test: add auth tests",
+            author_name="alice",
+            author_email="a@test.com",
+        ),
+    ]
+
+
 class TestReviewService:
     def test_review_returns_structured_result(self):
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         service = ReviewService(client)
         result = service.review("https://github.com/owner/repo/pull/1")
@@ -91,6 +110,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         service = ReviewService(client)
         service.review("https://github.com/owner/repo/pull/42")
@@ -124,6 +144,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         summarizer = MagicMock(spec=PRSummarizer)
         summarizer.summarize.return_value = "AI generated PR summary"
@@ -138,6 +159,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         service = ReviewService(client)
         result = service.review("https://github.com/owner/repo/pull/1")
@@ -148,6 +170,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         analyzer = MagicMock(spec=AIRiskAnalyzer)
         from ai_pr_review.review.models import (
@@ -181,6 +204,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         service = ReviewService(client)
         result = service.review("https://github.com/owner/repo/pull/1")
@@ -192,6 +216,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         gen = MagicMock(spec=ReviewSuggestionGenerator)
         gen.generate.return_value = "Please review auth module carefully"
@@ -206,6 +231,7 @@ class TestReviewService:
         client = MagicMock(spec=GitHubClient)
         client.get_pull_request.return_value = _mock_pr()
         client.get_pull_request_files.return_value = _mock_files()
+        client.get_pull_request_commits.return_value = _mock_commits()
 
         service = ReviewService(client)
         result = service.review("https://github.com/owner/repo/pull/1")

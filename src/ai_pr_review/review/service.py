@@ -31,6 +31,7 @@ class ReviewService:
 
         pr = self._github.get_pull_request(owner, repo, pull_number)
         raw_files = self._github.get_pull_request_files(owner, repo, pull_number)
+        commits = self._github.get_pull_request_commits(owner, repo, pull_number)
 
         file_changes = [
             parse_file_change(
@@ -65,6 +66,7 @@ class ReviewService:
                 "files_changed": summary["total_files"],
                 "additions": summary["total_additions"],
                 "deletions": summary["total_deletions"],
+                "commit_messages": [c.message for c in commits],
             }
             ai_summary = self._summarizer.summarize(pr_info, diff_context)
 
@@ -92,6 +94,7 @@ class ReviewService:
             "ai_risks": ai_risks,
             "risks": rule_risks + ai_risks,
             "review_suggestions": review_suggestions,
+            "commits": [{"sha": c.sha, "message": c.message, "author": c.author_name} for c in commits],
         }
 
     @staticmethod
