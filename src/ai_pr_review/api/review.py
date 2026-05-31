@@ -2,20 +2,27 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from ..github.client import GitHubClient
+from ..report.markdown import MarkdownReportGenerator
 from ..review.service import ReviewService
 from ..schemas import ApiResponse
 
 
 class ReviewRequest(BaseModel):
     pr_url: str
+    publish: bool = False
 
 
 class ReviewResponse(BaseModel):
     pr: dict
     summary: dict
-    ai_summary: str | None
-    risks: list
-    review_suggestions: str | None
+    ai_summary: str | None = None
+    risks: list | None = None
+    rule_risks: list | None = None
+    ai_risks: list | None = None
+    review_suggestions: str | None = None
+    markdown_report: str | None = None
+    comment_published: bool = False
+    comment_url: str | None = None
 
 
 router = APIRouter()
@@ -32,7 +39,20 @@ def review_pull_request(
 ) -> ApiResponse[ReviewResponse]:
     result = service.review(request.pr_url)
     if isinstance(result, dict):
+        result["markdown_report"] = MarkdownReportGenerator().generate(result)
         result = ReviewResponse.model_validate(result)
+
+    if not isinstance(result, ReviewResponse):
+        result = ReviewResponse.model_validate(result)
+
+    if request.publish and result.markdown_report:
+        try:
+            url = service.publish_review_comment(request.pr_url, result)
+            result.comment_published = True
+            result.comment_url = url
+        except Exception:
+            result.comment_published = False
+            result.comment_url = None
 
     return ApiResponse(
         success=True,

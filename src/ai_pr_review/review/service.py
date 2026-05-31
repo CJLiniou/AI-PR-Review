@@ -106,6 +106,17 @@ class ReviewService:
             f"删除: {summary['total_deletions']}"
         )
 
+    def publish_review_comment(self, pr_url: str, review) -> str | None:
+        parsed = parse_github_pr_url(pr_url)
+        owner, repo, pull_number = parsed.owner, parsed.repo, parsed.pull_number
+
+        markdown = getattr(review, "markdown_report", None) or ""
+        if not markdown:
+            return None
+
+        result = self._github.create_issue_comment(owner, repo, pull_number, markdown)
+        return result.get("html_url", "")
+
     @staticmethod
     def _risk_to_dict(r) -> dict:
         return {
