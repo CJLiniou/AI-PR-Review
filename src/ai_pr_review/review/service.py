@@ -8,6 +8,7 @@ from .summary import generate_rule_based_summary
 
 if TYPE_CHECKING:
     from ..ai.risk_analyzer import AIRiskAnalyzer
+    from ..ai.suggestion_generator import ReviewSuggestionGenerator
     from ..ai.summarizer import PRSummarizer
 
 
@@ -17,10 +18,12 @@ class ReviewService:
         github_client: GitHubClient,
         summarizer: "PRSummarizer | None" = None,
         risk_analyzer: "AIRiskAnalyzer | None" = None,
+        suggestion_generator: "ReviewSuggestionGenerator | None" = None,
     ) -> None:
         self._github = github_client
         self._summarizer = summarizer
         self._risk_analyzer = risk_analyzer
+        self._suggestion_generator = suggestion_generator
 
     def review(self, pr_url: str) -> dict:
         parsed = parse_github_pr_url(pr_url)
@@ -44,11 +47,14 @@ class ReviewService:
         diff_context = build_diff_context(file_changes)
         summary = generate_rule_based_summary(file_changes)
 
-        rule_risks = [self._risk_to_dict(r) for r in detect_rule_based_risks(file_changes)]
+        rule_risk_objs = detect_rule_based_risks(file_changes)
+        rule_risks = [self._risk_to_dict(r) for r in rule_risk_objs]
 
+        ai_risk_objs: list = []
         ai_risks: list[dict] = []
         if self._risk_analyzer is not None:
-            ai_risks = [self._risk_to_dict(r) for r in self._risk_analyzer.analyze(diff_context)]
+            ai_risk_objs = self._risk_analyzer.analyze(diff_context)
+            ai_risks = [self._risk_to_dict(r) for r in ai_risk_objs]
 
         ai_summary = None
         if self._summarizer is not None:
@@ -61,6 +67,14 @@ class ReviewService:
                 "deletions": summary["total_deletions"],
             }
             ai_summary = self._summarizer.summarize(pr_info, diff_context)
+
+        review_suggestions = None
+        if self._suggestion_generator is not None:
+            all_risk_objs = rule_risk_objs + ai_risk_objs
+            review_suggestions = self._suggestion_generator.generate(
+                ai_summary or self._build_basic_summary(summary, pr),
+                all_risk_objs,
+            )
 
         return {
             "pr": {
@@ -77,8 +91,17 @@ class ReviewService:
             "rule_risks": rule_risks,
             "ai_risks": ai_risks,
             "risks": rule_risks + ai_risks,
-            "review_suggestions": None,
+            "review_suggestions": review_suggestions,
         }
+
+    @staticmethod
+    def _build_basic_summary(summary: dict, pr) -> str:
+        return (
+            f"PR: {pr.title}\n"
+            f"文件变更数: {summary['total_files']}, "
+            f"新增: {summary['total_additions']}, "
+            f"删除: {summary['total_deletions']}"
+        )
 
     @staticmethod
     def _risk_to_dict(r) -> dict:

@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock
 
 from ai_pr_review.ai.risk_analyzer import AIRiskAnalyzer
+from ai_pr_review.ai.suggestion_generator import ReviewSuggestionGenerator
 from ai_pr_review.ai.summarizer import PRSummarizer
 from ai_pr_review.github.client import GitHubClient
 from ai_pr_review.github.models import (
@@ -186,3 +187,27 @@ class TestReviewService:
 
         assert result["ai_risks"] == []
         assert result["risks"] == result["rule_risks"]
+
+    def test_suggestions_populated_when_generator_provided(self):
+        client = MagicMock(spec=GitHubClient)
+        client.get_pull_request.return_value = _mock_pr()
+        client.get_pull_request_files.return_value = _mock_files()
+
+        gen = MagicMock(spec=ReviewSuggestionGenerator)
+        gen.generate.return_value = "Please review auth module carefully"
+
+        service = ReviewService(client, suggestion_generator=gen)
+        result = service.review("https://github.com/owner/repo/pull/1")
+
+        assert result["review_suggestions"] == "Please review auth module carefully"
+        gen.generate.assert_called_once()
+
+    def test_suggestions_none_when_no_generator(self):
+        client = MagicMock(spec=GitHubClient)
+        client.get_pull_request.return_value = _mock_pr()
+        client.get_pull_request_files.return_value = _mock_files()
+
+        service = ReviewService(client)
+        result = service.review("https://github.com/owner/repo/pull/1")
+
+        assert result["review_suggestions"] is None
