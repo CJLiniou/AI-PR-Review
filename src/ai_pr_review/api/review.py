@@ -1,3 +1,4 @@
+import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
@@ -6,6 +7,13 @@ from ..ai.risk_analyzer import AIRiskAnalyzer
 from ..ai.suggestion_generator import ReviewSuggestionGenerator
 from ..ai.summarizer import PRSummarizer
 from ..config import get_settings
+from ..exceptions import (
+    AIServiceError,
+    GitHubAPIError,
+    GitHubAuthError,
+    InvalidPRUrlError,
+    PullRequestNotFoundError,
+)
 from ..github.client import GitHubClient
 from ..report.markdown import MarkdownReportGenerator
 from ..review.service import ReviewService
@@ -59,7 +67,18 @@ def review_pull_request(
     request: ReviewRequest,
     service: ReviewService = Depends(get_review_service),
 ) -> ApiResponse[ReviewResponse]:
-    result = service.review(request.pr_url)
+    try:
+        result = service.review(request.pr_url)
+    except ValueError as exc:
+        raise InvalidPRUrlError(str(exc)) from exc
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code
+        if status == 401 or status == 403:
+            raise GitHubAuthError(f"GitHub 认证失败 (HTTP {status})，请检查 GITHUB_TOKEN") from exc
+        if status == 404:
+            raise PullRequestNotFoundError(f"PR 不存在或无权限访问 (HTTP {status})") from exc
+        raise GitHubAPIError(f"GitHub API 错误 (HTTP {status}): {exc.response.text[:200]}") from exc
+
     if isinstance(result, dict):
         result["markdown_report"] = MarkdownReportGenerator().generate(result)
         result = ReviewResponse.model_validate(result)
