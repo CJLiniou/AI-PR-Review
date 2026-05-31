@@ -1,13 +1,23 @@
+from typing import TYPE_CHECKING
+
 from ..github.client import GitHubClient
 from ..github.parser import parse_file_change, parse_github_pr_url
 from .diff import build_diff_context
 from .risk_rules import detect_rule_based_risks
 from .summary import generate_rule_based_summary
 
+if TYPE_CHECKING:
+    from ..ai.summarizer import PRSummarizer
+
 
 class ReviewService:
-    def __init__(self, github_client: GitHubClient) -> None:
+    def __init__(
+        self,
+        github_client: GitHubClient,
+        summarizer: "PRSummarizer | None" = None,
+    ) -> None:
         self._github = github_client
+        self._summarizer = summarizer
 
     def review(self, pr_url: str) -> dict:
         parsed = parse_github_pr_url(pr_url)
@@ -32,6 +42,18 @@ class ReviewService:
         summary = generate_rule_based_summary(file_changes)
         risks = [self._risk_to_dict(r) for r in detect_rule_based_risks(file_changes)]
 
+        ai_summary = None
+        if self._summarizer is not None:
+            pr_info = {
+                "title": pr.title,
+                "author": pr.user.login,
+                "description": pr.body or "",
+                "files_changed": summary["total_files"],
+                "additions": summary["total_additions"],
+                "deletions": summary["total_deletions"],
+            }
+            ai_summary = self._summarizer.summarize(pr_info, diff_context)
+
         return {
             "pr": {
                 "title": pr.title,
@@ -43,7 +65,7 @@ class ReviewService:
                 "html_url": pr.html_url,
             },
             "summary": summary,
-            "ai_summary": None,
+            "ai_summary": ai_summary,
             "risks": risks,
             "review_suggestions": None,
         }

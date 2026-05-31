@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from ai_pr_review.ai.summarizer import PRSummarizer
 from ai_pr_review.github.client import GitHubClient
 from ai_pr_review.github.models import (
     GitHubChangedFile,
@@ -112,3 +113,27 @@ class TestReviewService:
 
         assert result["risks"] == []
         assert result["summary"]["total_files"] == 1
+
+    def test_ai_summary_populated_when_summarizer_provided(self):
+        client = MagicMock(spec=GitHubClient)
+        client.get_pull_request.return_value = _mock_pr()
+        client.get_pull_request_files.return_value = _mock_files()
+
+        summarizer = MagicMock(spec=PRSummarizer)
+        summarizer.summarize.return_value = "AI generated PR summary"
+
+        service = ReviewService(client, summarizer=summarizer)
+        result = service.review("https://github.com/owner/repo/pull/1")
+
+        assert result["ai_summary"] == "AI generated PR summary"
+        summarizer.summarize.assert_called_once()
+
+    def test_ai_summary_none_when_no_summarizer(self):
+        client = MagicMock(spec=GitHubClient)
+        client.get_pull_request.return_value = _mock_pr()
+        client.get_pull_request_files.return_value = _mock_files()
+
+        service = ReviewService(client)
+        result = service.review("https://github.com/owner/repo/pull/1")
+
+        assert result["ai_summary"] is None
