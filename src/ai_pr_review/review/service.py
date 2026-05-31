@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 from ..github.client import GitHubClient
 from ..github.parser import parse_file_change, parse_github_pr_url
 from .diff import build_diff_context
+from .risk_filter import filter_risks_by_confidence
+from .risk_merge import merge_risks
 from .risk_rules import detect_rule_based_risks
 from .summary import generate_rule_based_summary
 
@@ -57,6 +59,10 @@ class ReviewService:
             ai_risk_objs = self._risk_analyzer.analyze(diff_context)
             ai_risks = [self._risk_to_dict(r) for r in ai_risk_objs]
 
+        merged_objs = merge_risks(rule_risk_objs, ai_risk_objs)
+        filtered_objs = filter_risks_by_confidence(merged_objs)
+        risks = [self._risk_to_dict(r) for r in filtered_objs]
+
         ai_summary = None
         if self._summarizer is not None:
             pr_info = {
@@ -72,10 +78,9 @@ class ReviewService:
 
         review_suggestions = None
         if self._suggestion_generator is not None:
-            all_risk_objs = rule_risk_objs + ai_risk_objs
             review_suggestions = self._suggestion_generator.generate(
                 ai_summary or self._build_basic_summary(summary, pr),
-                all_risk_objs,
+                filtered_objs,
             )
 
         return {
@@ -92,7 +97,7 @@ class ReviewService:
             "ai_summary": ai_summary,
             "rule_risks": rule_risks,
             "ai_risks": ai_risks,
-            "risks": rule_risks + ai_risks,
+            "risks": risks,
             "review_suggestions": review_suggestions,
             "commits": [{"sha": c.sha, "message": c.message, "author": c.author_name} for c in commits],
         }
