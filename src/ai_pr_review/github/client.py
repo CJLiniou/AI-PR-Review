@@ -1,7 +1,8 @@
 import os
 import re
 import httpx
-from .models import PRInfo, FileChange
+
+from .models import FileChange, GitHubChangedFile, GitHubPullRequest, GitHubUser, PRInfo
 from .parser import parse_file_change, parse_github_pr_url
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -21,10 +22,12 @@ SKIP_PATTERNS = [
 
 
 class GitHubClient:
-    def __init__(self, token: str | None = None):
-        self._token = token or os.environ.get("GITHUB_TOKEN", "")
+    def __init__(self, github_token: str | None = None, token: str | None = None):
+        self._token = github_token if github_token is not None else token
+        if self._token is None:
+            self._token = os.environ.get("GITHUB_TOKEN", "")
         self._headers = {
-            "Accept": "application/vnd.github.v3+json",
+            "Accept": "application/vnd.github+json",
             "User-Agent": "ai-pr-review",
         }
         if self._token:
@@ -35,22 +38,58 @@ class GitHubClient:
         parsed = parse_github_pr_url(pr_url)
         return parsed.owner, parsed.repo, parsed.pull_number
 
+    def _get(self, path: str, params: dict | None = None) -> dict | list:
+        url = f"{GITHUB_API_BASE}/{path.lstrip('/')}"
+        with httpx.Client(timeout=30) as client:
+            response = client.get(url, headers=self._headers, params=params)
+            response.raise_for_status()
+            return response.json()
+
+    def get_pull_request(self, owner: str, repo: str, pull_number: int) -> GitHubPullRequest:
+        pr_data = self._get(f"repos/{owner}/{repo}/pulls/{pull_number}")
+
+        user_data = pr_data.get("user") or {}
+        base_data = pr_data.get("base") or {}
+        head_data = pr_data.get("head") or {}
+
+        return GitHubPullRequest(
+            number=pr_data.get("number", pull_number),
+            title=pr_data.get("title", ""),
+            body=pr_data.get("body"),
+            state=pr_data.get("state", ""),
+            html_url=pr_data.get("html_url", ""),
+            user=GitHubUser(
+                login=user_data.get("login", ""),
+                html_url=user_data.get("html_url", ""),
+            ),
+            base_branch=base_data.get("ref", ""),
+            head_branch=head_data.get("ref", ""),
+            head_sha=head_data.get("sha", ""),
+            created_at=pr_data.get("created_at", ""),
+            updated_at=pr_data.get("updated_at", ""),
+        )
+
+    def get_pull_request_files(self, owner: str, repo: str, pull_number: int) -> list[GitHubChangedFile]:
+        files_data = self._get(f"repos/{owner}/{repo}/pulls/{pull_number}/files")
+
+        return [
+            GitHubChangedFile(
+                filename=file_data.get("filename", ""),
+                status=file_data.get("status", ""),
+                additions=file_data.get("additions", 0),
+                deletions=file_data.get("deletions", 0),
+                changes=file_data.get("changes", 0),
+                patch=file_data.get("patch"),
+                raw_url=file_data.get("raw_url", ""),
+                blob_url=file_data.get("blob_url", ""),
+            )
+            for file_data in files_data
+        ]
+
     def fetch_pr(self, pr_url: str) -> PRInfo:
         owner, repo, number = self.parse_pr_url(pr_url)
-        with httpx.Client(timeout=30) as client:
-            pr_resp = client.get(
-                f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{number}",
-                headers=self._headers,
-            )
-            pr_resp.raise_for_status()
-            pr_data = pr_resp.json()
-
-            files_resp = client.get(
-                f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{number}/files",
-                headers=self._headers,
-            )
-            files_resp.raise_for_status()
-            files_data = files_resp.json()
+        pr_data = self._get(f"repos/{owner}/{repo}/pulls/{number}")
+        files_data = self._get(f"repos/{owner}/{repo}/pulls/{number}/files")
 
         return PRInfo(
             title=pr_data.get("title", ""),
