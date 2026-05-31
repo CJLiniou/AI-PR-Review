@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI PR Review</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --dim: #8b949e;
+    --accent: #58a6ff;
+    --danger: #f85149;
+    --warning: #d29922;
+    --success: #3fb950;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+  header { text-align: center; padding: 40px 0 24px; }
+  header h1 { font-size: 28px; margin-bottom: 8px; }
+  header p { color: var(--dim); font-size: 14px; }
+
+  .input-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 24px; }
+  .input-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .input-row input { flex: 1; min-width: 260px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 14px; outline: none; }
+  .input-row input:focus { border-color: var(--accent); }
+  .input-row button { padding: 10px 24px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; }
+  .input-row button:hover { opacity: 0.9; }
+  .input-row button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .publish-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); cursor: pointer; margin-top: 10px; }
+  .publish-label input { width: auto; min-width: auto; }
+
+  .loader { display: none; text-align: center; padding: 40px; color: var(--dim); }
+  .loader.active { display: block; }
+  .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .error-card { display: none; background: #2d1114; border: 1px solid var(--danger); border-radius: 8px; padding: 16px; margin-bottom: 24px; color: var(--danger); }
+  .error-card.active { display: block; }
+
+  .result { display: none; }
+  .result.active { display: block; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 18px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .card table { width: 100%; border-collapse: collapse; }
+  .card td { padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .card td:first-child { color: var(--dim); width: 120px; }
+  .card td pre { white-space: pre-wrap; font-size: 13px; }
+  .card th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+
+  .risk-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .risk-item:last-child { border-bottom: none; }
+  .risk-high { border-left: 3px solid var(--danger); padding-left: 12px; }
+  .risk-medium { border-left: 3px solid var(--warning); padding-left: 12px; }
+  .risk-low { border-left: 3px solid var(--dim); padding-left: 12px; }
+  .risk-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+  .badge-high { background: #2d1114; color: var(--danger); }
+  .badge-medium { background: #2d1f0a; color: var(--warning); }
+  .badge-low { background: #1c2128; color: var(--dim); }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat-item { background: var(--bg); padding: 12px; border-radius: 6px; text-align: center; }
+  .stat-value { font-size: 24px; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+  .markdown-body { font-size: 14px; line-height: 1.6; padding: 20px; background: var(--card); border-radius: 8px; border: 1px solid var(--border); }
+  .markdown-body h1 { font-size: 22px; padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .markdown-body h2 { font-size: 16px; margin: 24px 0 8px; }
+  .markdown-body table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+  .markdown-body td, .markdown-body th { padding: 6px 12px; border: 1px solid var(--border); text-align: left; }
+  .markdown-body code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .markdown-body blockquote { border-left: 3px solid var(--border); padding-left: 12px; margin: 8px 0; color: var(--dim); }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+  .tab { padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px 6px 0 0; background: var(--bg); color: var(--dim); cursor: pointer; font-size: 13px; }
+  .tab.active { background: var(--card); color: var(--text); border-bottom-color: var(--card); }
+
+  .comment-status { font-size: 13px; color: var(--success); padding: 8px 0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>AI PR Review</h1>
+    <p>输入 GitHub PR 链接，获取 AI 驱动的代码审查报告</p>
+  </header>
+
+  <div class="input-card">
+    <div class="input-row">
+      <input id="prUrl" type="text" placeholder="https://github.com/owner/repo/pull/123" />
+      <button id="submitBtn" onclick="review()">开始 Review</button>
+    </div>
+    <label class="publish-label">
+      <input type="checkbox" id="publishCheck" /> 发布评论到 GitHub PR
+    </label>
+  </div>
+
+  <div id="loader" class="loader">
+    <div class="spinner"></div>
+    <p>正在分析 PR，请稍候...</p>
+    <p style="font-size:12px;color:var(--dim);margin-top:8px">获取 PR 数据 → Diff 分析 → AI 总结 → 风险识别 → 生成报告</p>
+  </div>
+
+  <div id="errorCard" class="error-card"></div>
+
+  <div id="result" class="result">
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="comment-status" id="commentStatus"></div>
+
+    <div class="tabs" style="margin-top:20px">
+      <div class="tab active" onclick="switchTab('report')">报告预览</div>
+      <div class="tab" onclick="switchTab('risks')">风险详情</div>
+      <div class="tab" onclick="switchTab('raw')">Markdown 原文</div>
+    </div>
+
+    <div id="tab-report" class="markdown-body"></div>
+    <div id="tab-risks" class="card" style="display:none"></div>
+    <pre id="tab-raw" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:20px;overflow-x:auto;font-size:13px;white-space:pre-wrap"></pre>
+  </div>
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  ['report', 'risks', 'raw'].forEach(id => {
+    document.getElementById('tab-' + id).style.display = id === name ? '' : 'none';
+  });
+}
+
+async function review() {
+  const url = document.getElementById('prUrl').value.trim();
+  if (!url) return;
+
+  const publish = document.getElementById('publishCheck').checked;
+  document.getElementById('submitBtn').disabled = true;
+  document.getElementById('loader').classList.add('active');
+  document.getElementById('errorCard').classList.remove('active');
+  document.getElementById('result').classList.remove('active');
+
+  try {
+    const resp = await fetch('/api/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pr_url: url, publish })
+    });
+    const body = await resp.json();
+
+    if (!body.success) {
+      showError(body.message + ': ' + (body.error?.detail || ''));
+      return;
+    }
+
+    render(body.data);
+  } catch (err) {
+    showError('请求失败: ' + err.message);
+  } finally {
+    document.getElementById('submitBtn').disabled = false;
+    document.getElementById('loader').classList.remove('active');
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorCard');
+  el.textContent = msg;
+  el.classList.add('active');
+}
+
+function render(data) {
+  document.getElementById('result').classList.add('active');
+
+  // Stats
+  const s = data.summary || {};
+  const risks = data.risks || [];
+  const highCount = risks.filter(r => r.risk_level === 'high').length;
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-item"><div class="stat-value">${s.total_files || 0}</div><div class="stat-label">变更文件</div></div>
+    <div class="stat-item"><div class="stat-value">${s.total_additions || 0}</div><div class="stat-label">新增行</div></div>
+    <div class="stat-item"><div class="stat-value">${s.total_deletions || 0}</div><div class="stat-label">删除行</div></div>
+    <div class="stat-item"><div class="stat-value">${risks.length}</div><div class="stat-label">风险项</div></div>
+    <div class="stat-item"><div class="stat-value" style="color:var(--danger)">${highCount}</div><div class="stat-label">高危</div></div>
+  `;
+
+  // Comment status
+  const cs = document.getElementById('commentStatus');
+  if (data.comment_published) {
+    cs.innerHTML = '✅ 评论已发布到 GitHub: <a href="' + data.comment_url + '" target="_blank">' + data.comment_url + '</a>';
+  } else if (data.comment_url) {
+    cs.innerHTML = '❌ 评论发布失败';
+  }
+
+  // Markdown report
+  document.getElementById('tab-report').innerHTML = simpleMarkdown(data.markdown_report || '');
+
+  // Risks tab
+  let risksHtml = '<h2>风险项列表</h2>';
+  if (risks.length === 0) {
+    risksHtml += '<p style="color:var(--dim)">未发现风险</p>';
+  } else {
+    risks.forEach(r => {
+      const cls = 'risk-' + (r.risk_level || 'low');
+      const badgeCls = 'badge-' + (r.risk_level || 'low');
+      risksHtml += `<div class="risk-item ${cls}">
+        <span class="risk-badge ${badgeCls}">${(r.risk_level || '').toUpperCase()}</span>
+        <span style="color:var(--dim);font-size:12px;margin-left:8px">[${r.category}] ${r.file}${r.line ? ':' + r.line : ''} (${r.source})</span>
+        <p style="margin-top:4px">${r.message}</p>
+        ${r.suggestion ? '<p style="color:var(--dim);font-size:13px;margin-top:2px">建议: ' + r.suggestion + '</p>' : ''}
+      </div>`;
+    });
+  }
+  document.getElementById('tab-risks').innerHTML = risksHtml;
+
+  // Raw
+  document.getElementById('tab-raw').textContent = data.markdown_report || '';
+
+  // Reset to report tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.tab').classList.add('active');
+  ['risks', 'raw'].forEach(id => {
+    document.getElementById('tab-' + id).style.display = 'none';
+  });
+  document.getElementById('tab-report').style.display = '';
+}
+
+function simpleMarkdown(md) {
+  if (!md) return '';
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^> (.+)/gm, '<blockquote>$1</blockquote>')
+    .replace(/^- (.+)/gm, '<li>$1</li>')
+    .replace(/^(\|.+)$/gm, line => {
+      const cells = line.split('|').filter(c => c.trim()).map(c => c.trim().replace(/^-+$/, ''));
+      if (cells[0] === '' || cells[0] === '---') return line;
+      const tag = line.match(/^\|[- ]+\|/) ? 'th' : 'td';
+      return '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
+    })
+    .replace(/((?:<tr>.*<\/tr>\n?)+)/g, '<table>$1</table>')
+    .replace(/\n/g, '<br>');
+}
+
+// Enter key submit
+document.getElementById('prUrl').addEventListener('keydown', e => {
+  if (e.key === 'Enter') review();
+});
+</script>
+</body>
+</html>

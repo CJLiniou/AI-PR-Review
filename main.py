@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 try:
     from ai_pr_review.api import router as api_router
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title="AI PR Review Assistant")
     app.add_exception_handler(AIPrReviewError, ai_pr_review_error_handler)
     app.include_router(api_router)
+    app.mount("/", StaticFiles(directory="static", html=True), name="static")
     return app
 
 
