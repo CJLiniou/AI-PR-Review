@@ -1,203 +1,169 @@
 # AI PR Review Assistant
 
-AI PR Review Assistant is a FastAPI-based tool for reviewing GitHub pull requests. It fetches PR metadata, changed files, and commit information, then exposes review results through an HTTP API and a command-line interface.
+基于 FastAPI 的 AI 驱动 GitHub PR 自动审查工具。输入 PR 链接，自动拉取代码变更，结合**规则引擎**和**大模型**生成结构化 Review 报告。支持 Web 界面、API 和命令行三种使用方式。
 
-The current implementation is designed as a foundation for rule-based and AI-assisted PR analysis. Some service methods are intentionally lightweight and can be replaced with real GitHub and AI integrations as the project evolves.
+## 功能列表
 
-## Features
+- 解析 GitHub PR 链接，自动提取 owner / repo / pull number
+- 获取 PR 元数据、变更文件（含分页）、commit 记录
+- 十多条内置规则引擎：路径风险、关键词扫描、大 PR 规模检测
+- 可选接入 DeepSeek / OpenAI 等大模型，生成 PR 总结、风险分析和 Review 建议
+- Markdown 报告生成，Web 端渲染预览
+- 勾选一键发布 Review 评论到 GitHub PR 评论区
+- 风险去重合并，低置信度过滤
+- 测试文件识别，高风险变更缺少测试提醒
+- `.aiprignore` 忽略文件支持
+- 统一 API 错误响应（400 / 403 / 404 / 502）
 
-- Parse GitHub pull request URLs.
-- Fetch pull request metadata from GitHub.
-- Fetch changed files, including paginated file lists.
-- Fetch PR commit messages.
-- Build structured diff context with patch length limits.
-- Support simple `.aiprignore` file matching.
-- Expose health and review API endpoints.
-- Provide a CLI command that prints a Markdown review report.
-- Return structured API error responses for known failures.
-
-## Directory Structure
+## 目录结构
 
 ```text
 AI-PR-Review/
-  main.py
-  pyproject.toml
-  README.md
-  src/
-    ai_pr_review/
-      ai/
-      api/
-      github/
-      review/
-      schemas/
-      utils/
-      cli.py
-      config.py
-      exceptions.py
-  tests/
+├── main.py                    FastAPI 应用入口
+├── pyproject.toml             依赖和 CLI 入口配置
+├── static/
+│   └── index.html             Web 前端页面
+├── src/ai_pr_review/
+│   ├── ai/                    AI 客户端和 Prompt 模板
+│   ├── api/                   FastAPI 路由
+│   ├── github/                GitHub URL 解析、数据模型、API 客户端
+│   ├── review/                规则引擎、风险检测、去重过滤
+│   ├── report/                Markdown 报告生成器
+│   ├── schemas/               API 请求与响应模型
+│   ├── utils/                 日志工具
+│   ├── cli.py                 命令行入口
+│   ├── config.py              环境变量配置
+│   └── exceptions.py          自定义异常类型
+├── tests/                     单元测试和 API 测试
+├── examples/
+│   ├── demo.py                Mock 数据演示脚本
+│   ├── demo_script.md         视频演示讲话稿
+│   └── review_report.md       示例 Review 报告
+└── docs/
+    └── design.md              系统设计文档
 ```
 
-## Installation
+## 环境要求
 
-Use Python 3.10 or newer.
+Python 3.10+
+
+## 安装
 
 ```bash
+# 创建虚拟环境
 python -m venv .venv
-```
 
-On Windows PowerShell:
-
-```bash
+# 激活（Windows PowerShell）
 .\.venv\Scripts\Activate.ps1
-```
 
-On macOS or Linux:
-
-```bash
+# 激活（macOS / Linux）
 source .venv/bin/activate
-```
 
-Install the project in editable mode:
+# 安装
+pip install -e .
 
-```bash
-python -m pip install -e .
-```
-
-Run tests:
-
-```bash
+# 运行测试
 python -m pytest
 ```
 
-## Environment Variables
+## 环境变量配置
 
-Configuration is loaded from environment variables and an optional `.env` file.
+在项目根目录创建 `.env` 文件（参考 `.env.example`）：
 
-```text
-APP_NAME=AI PR Review Assistant
-APP_ENV=development
-GITHUB_TOKEN=
-LLM_PROVIDER=openai
-LLM_API_KEY=
-LLM_MODEL=gpt-4o-mini
-REQUEST_TIMEOUT=30
-MAX_DIFF_CHARS=120000
-MAX_PATCH_CHARS_PER_FILE=20000
+```env
+# GitHub Personal Access Token（公开仓库可不填，但有 60次/小时 速率限制）
+GITHUB_TOKEN=ghp_xxxxxxxxxxxx
+
+# LLM 配置（不填 AI 相关项则走 Mock 模式，仅使用规则引擎）
+LLM_API_KEY=sk-your-api-key
+LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://api.deepseek.com/v1
 ```
 
-`GITHUB_TOKEN` is optional for public repositories, but GitHub rate limits are lower without it.
+> DeepSeek / OpenAI / 其他兼容 OpenAI 协议的厂商均可，只需修改 `LLM_BASE_URL`。
 
-## Start The API Server
+## 启动服务
 
 ```bash
-python -m uvicorn main:app --reload
+uvicorn main:app --reload
 ```
 
-The API will be available at:
+浏览器打开 **http://127.0.0.1:8000** 即进入 Web 界面，或访问 **http://127.0.0.1:8000/docs** 使用 Swagger UI。
 
-```text
-http://127.0.0.1:8000
-```
+## 使用方式
 
-## Health Check
+### Web 界面
 
-```bash
-curl http://127.0.0.1:8000/api/health
-```
+1. 打开 `http://127.0.0.1:8000`
+2. 粘贴 GitHub PR 链接
+3. 点击「开始 Review」
+4. 查看报告预览、风险详情和 Markdown 原文
+5. 勾选「发布评论」可将报告发到 GitHub PR 评论区
 
-Example response:
-
-```json
-{
-  "success": true,
-  "message": "AI PR Review Assistant is running.",
-  "data": {
-    "status": "ok",
-    "app_env": "development"
-  },
-  "error": null
-}
-```
-
-## Review API
-
-Call `POST /api/review` with a GitHub PR URL:
+### API 调用
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/review \
   -H "Content-Type: application/json" \
-  -d "{\"pr_url\":\"https://github.com/owner/repo/pull/123\"}"
+  -d '{"pr_url": "https://github.com/owner/repo/pull/123"}'
+
+# 发布到 GitHub 评论区
+curl -X POST http://127.0.0.1:8000/api/review \
+  -H "Content-Type: application/json" \
+  -d '{"pr_url": "https://github.com/owner/repo/pull/123", "publish": true}'
 ```
 
-Example response shape:
+返回示例：
 
 ```json
 {
   "success": true,
   "message": "PR review completed.",
   "data": {
-    "pr": {
-      "url": "https://github.com/owner/repo/pull/123"
-    },
-    "summary": {},
-    "ai_summary": null,
-    "risks": [],
-    "review_suggestions": null
-  },
-  "error": null
-}
-```
-
-Known errors use the same response envelope:
-
-```json
-{
-  "success": false,
-  "message": "Invalid GitHub PR URL",
-  "data": null,
-  "error": {
-    "code": "INVALID_PR_URL",
-    "detail": "Unsupported PR URL"
+    "pr": {"title": "...", "author": "...", "state": "open"},
+    "summary": {"total_files": 6, "total_additions": 270, "total_deletions": 17},
+    "ai_summary": "本 PR 在结算流程中新增优惠券校验功能...",
+    "risks": [
+      {
+        "file": "src/checkout/service.py",
+        "line": 6,
+        "risk_level": "high",
+        "source": "ai",
+        "category": "logic",
+        "message": "apply_discount 未处理边界情况",
+        "suggestion": "增加防御性检查"
+      }
+    ],
+    "markdown_report": "# AI PR Review Report\n..."
   }
 }
 ```
 
-## CLI Usage
-
-After installing the project, run:
+### CLI
 
 ```bash
 ai-pr-review review https://github.com/owner/repo/pull/123
 ```
 
-The CLI prints a Markdown report to stdout:
+### Demo 脚本（无需 Token，无需网络）
 
-```markdown
-# PR Review Report
-
-## PR
-- **url**: https://github.com/owner/repo/pull/123
-
-## Summary
-- No summary available.
-
-## AI Summary
-No AI summary available.
-
-## Risks
-- No risks found.
-
-## Review Suggestions
-No review suggestions available.
+```bash
+python examples/demo.py
 ```
 
-The CLI does not publish GitHub review comments by default.
+## 规则引擎
 
-## Ignore Rules
+内置三类规则，默认启用，无需 LLM：
 
-Create a `.aiprignore` file to skip files or directories during analysis. See `.aiprignore.example`.
+| 类型 | 说明 |
+|------|------|
+| 路径规则 | `auth/` → 高危/安全, `payment/` → 高危/逻辑, `migration/` → 高危/逻辑, `config/` → 中危/可维护性 等 |
+| 关键词规则 | `eval()`, `exec()`, `shell=True`, `chmod 777`, `DROP TABLE`, `secret` 等 |
+| 规模规则 | 文件数 >20 中危、>50 高危；单文件 >300 行高危；总变更 >1000 行高危 |
 
-Supported simple patterns include:
+## 忽略文件
+
+创建 `.aiprignore`（参考 `.aiprignore.example`）：
 
 ```text
 dist/
@@ -206,13 +172,15 @@ generated/
 package-lock.json
 ```
 
-Full `.gitignore` compatibility is not currently required or implemented.
+## 错误处理
 
-## Current Limitations
+| 状态码 | 错误码 | 说明 |
+|--------|--------|------|
+| 400 | `INVALID_PR_URL` | PR URL 格式不合法 |
+| 403 | `GITHUB_AUTH_ERROR` | GitHub Token 无效 |
+| 404 | `PULL_REQUEST_NOT_FOUND` | PR 不存在 |
+| 502 | `GITHUB_API_ERROR` | GitHub API 异常 |
+| 502 | `AI_SERVICE_ERROR` | AI 模型调用失败 |
 
-- `/api/review` currently uses a lightweight review service implementation.
-- Real AI analysis may require additional service wiring and `LLM_API_KEY`.
-- GitHub API access for private repositories requires `GITHUB_TOKEN`.
-- Ignore rules intentionally support only simple directory, filename, and wildcard patterns.
-- CLI output is local Markdown only and does not publish comments to GitHub.
-- Large diff patches are truncated according to `MAX_DIFF_CHARS` and `MAX_PATCH_CHARS_PER_FILE`.
+## 视频链接
+https://pan.baidu.com/s/13pu3HLMCDjLKaWPBVlpsrA?pwd=t5pz
