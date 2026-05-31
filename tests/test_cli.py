@@ -4,7 +4,7 @@ from ai_pr_review import cli
 class FakeReviewService:
     called_with: str | None = None
 
-    def __init__(self, github_client=None) -> None:
+    def __init__(self, github_client=None, **kwargs) -> None:
         pass
 
     def review(self, pr_url: str) -> dict:

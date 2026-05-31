@@ -7,7 +7,7 @@ class FakeReviewService:
     called_with: str | None = None
     publish_called = False
 
-    def __init__(self, github_client=None) -> None:
+    def __init__(self, github_client=None, **kwargs) -> None:
         pass
 
     def review(self, pr_url: str) -> dict:

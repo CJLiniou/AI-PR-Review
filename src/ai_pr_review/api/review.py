@@ -1,6 +1,11 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from ..ai.client import MockAIClient, OpenAIClient
+from ..ai.risk_analyzer import AIRiskAnalyzer
+from ..ai.suggestion_generator import ReviewSuggestionGenerator
+from ..ai.summarizer import PRSummarizer
+from ..config import get_settings
 from ..github.client import GitHubClient
 from ..report.markdown import MarkdownReportGenerator
 from ..review.service import ReviewService
@@ -29,7 +34,24 @@ router = APIRouter()
 
 
 def get_review_service() -> ReviewService:
-    return ReviewService(GitHubClient())
+    settings = get_settings()
+
+    ai_client = MockAIClient()
+    if settings.llm_api_key:
+        base_url = settings.llm_base_url or "https://api.openai.com/v1"
+        ai_client = OpenAIClient(
+            api_key=settings.llm_api_key,
+            model=settings.llm_model,
+            base_url=base_url,
+            timeout=settings.request_timeout,
+        )
+
+    return ReviewService(
+        github_client=GitHubClient(token=settings.github_token),
+        summarizer=PRSummarizer(ai_client),
+        risk_analyzer=AIRiskAnalyzer(ai_client),
+        suggestion_generator=ReviewSuggestionGenerator(ai_client),
+    )
 
 
 @router.post("/review", response_model=ApiResponse[ReviewResponse])

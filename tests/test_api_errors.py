@@ -5,7 +5,7 @@ from main import create_app
 
 
 class InvalidUrlReviewService:
-    def __init__(self, github_client=None) -> None:
+    def __init__(self, github_client=None, **kwargs) -> None:
         pass
 
     def review(self, pr_url: str) -> dict:
@@ -13,7 +13,7 @@ class InvalidUrlReviewService:
 
 
 class GitHubErrorReviewService:
-    def __init__(self, github_client=None) -> None:
+    def __init__(self, github_client=None, **kwargs) -> None:
         pass
 
     def review(self, pr_url: str) -> dict:
