@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from ai_pr_review.ai.risk_analyzer import AIRiskAnalyzer
 from ai_pr_review.ai.summarizer import PRSummarizer
 from ai_pr_review.github.client import GitHubClient
 from ai_pr_review.github.models import (
@@ -69,7 +70,11 @@ class TestReviewService:
         assert result["summary"]["total_additions"] == 11
 
         assert "risks" in result
+        assert "rule_risks" in result
+        assert "ai_risks" in result
         assert len(result["risks"]) >= 1
+        assert len(result["rule_risks"]) >= 1
+        assert result["ai_risks"] == []
         risk = result["risks"][0]
         assert "file" in risk
         assert "risk_level" in risk
@@ -137,3 +142,47 @@ class TestReviewService:
         result = service.review("https://github.com/owner/repo/pull/1")
 
         assert result["ai_summary"] is None
+
+    def test_ai_risks_populated_when_analyzer_provided(self):
+        client = MagicMock(spec=GitHubClient)
+        client.get_pull_request.return_value = _mock_pr()
+        client.get_pull_request_files.return_value = _mock_files()
+
+        analyzer = MagicMock(spec=AIRiskAnalyzer)
+        from ai_pr_review.review.models import (
+            Confidence,
+            ReviewRisk,
+            RiskCategory,
+            RiskLevel,
+            RiskSource,
+        )
+        analyzer.analyze.return_value = [
+            ReviewRisk(
+                file="src/auth.py",
+                risk_level=RiskLevel.HIGH,
+                source=RiskSource.AI,
+                category=RiskCategory.SECURITY,
+                message="AI detected risk",
+                suggestion="Fix it",
+            )
+        ]
+
+        service = ReviewService(client, risk_analyzer=analyzer)
+        result = service.review("https://github.com/owner/repo/pull/1")
+
+        assert len(result["ai_risks"]) == 1
+        assert result["ai_risks"][0]["message"] == "AI detected risk"
+        assert result["ai_risks"][0]["source"] == "ai"
+        assert len(result["rule_risks"]) >= 1
+        assert len(result["risks"]) == len(result["rule_risks"]) + len(result["ai_risks"])
+
+    def test_ai_risks_empty_when_no_analyzer(self):
+        client = MagicMock(spec=GitHubClient)
+        client.get_pull_request.return_value = _mock_pr()
+        client.get_pull_request_files.return_value = _mock_files()
+
+        service = ReviewService(client)
+        result = service.review("https://github.com/owner/repo/pull/1")
+
+        assert result["ai_risks"] == []
+        assert result["risks"] == result["rule_risks"]

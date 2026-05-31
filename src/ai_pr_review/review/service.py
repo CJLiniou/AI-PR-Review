@@ -7,6 +7,7 @@ from .risk_rules import detect_rule_based_risks
 from .summary import generate_rule_based_summary
 
 if TYPE_CHECKING:
+    from ..ai.risk_analyzer import AIRiskAnalyzer
     from ..ai.summarizer import PRSummarizer
 
 
@@ -15,9 +16,11 @@ class ReviewService:
         self,
         github_client: GitHubClient,
         summarizer: "PRSummarizer | None" = None,
+        risk_analyzer: "AIRiskAnalyzer | None" = None,
     ) -> None:
         self._github = github_client
         self._summarizer = summarizer
+        self._risk_analyzer = risk_analyzer
 
     def review(self, pr_url: str) -> dict:
         parsed = parse_github_pr_url(pr_url)
@@ -40,7 +43,12 @@ class ReviewService:
 
         diff_context = build_diff_context(file_changes)
         summary = generate_rule_based_summary(file_changes)
-        risks = [self._risk_to_dict(r) for r in detect_rule_based_risks(file_changes)]
+
+        rule_risks = [self._risk_to_dict(r) for r in detect_rule_based_risks(file_changes)]
+
+        ai_risks: list[dict] = []
+        if self._risk_analyzer is not None:
+            ai_risks = [self._risk_to_dict(r) for r in self._risk_analyzer.analyze(diff_context)]
 
         ai_summary = None
         if self._summarizer is not None:
@@ -66,7 +74,9 @@ class ReviewService:
             },
             "summary": summary,
             "ai_summary": ai_summary,
-            "risks": risks,
+            "rule_risks": rule_risks,
+            "ai_risks": ai_risks,
+            "risks": rule_risks + ai_risks,
             "review_suggestions": None,
         }
 
