@@ -1,0 +1,11 @@
+# Build outputs
+dist/
+
+# Generated files
+generated/
+
+# Minified assets
+*.min.js
+
+# Dependency lock files
+package-lock.json
