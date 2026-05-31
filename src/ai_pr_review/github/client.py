@@ -2,7 +2,14 @@ import os
 import re
 import httpx
 
-from .models import FileChange, GitHubChangedFile, GitHubPullRequest, GitHubUser, PRInfo
+from .models import (
+    FileChange,
+    GitHubChangedFile,
+    GitHubCommit,
+    GitHubPullRequest,
+    GitHubUser,
+    PRInfo,
+)
 from .parser import parse_file_change, parse_github_pr_url
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -96,6 +103,19 @@ class GitHubClient:
             raw_url=file_data.get("raw_url", ""),
             blob_url=file_data.get("blob_url", ""),
         )
+
+    def get_pull_request_commits(self, owner: str, repo: str, pull_number: int) -> list[GitHubCommit]:
+        commits_data = self._get(f"repos/{owner}/{repo}/pulls/{pull_number}/commits")
+
+        return [
+            GitHubCommit(
+                sha=commit_data.get("sha", ""),
+                message=(commit_data.get("commit") or {}).get("message", ""),
+                author_name=((commit_data.get("commit") or {}).get("author") or {}).get("name", ""),
+                author_email=((commit_data.get("commit") or {}).get("author") or {}).get("email", ""),
+            )
+            for commit_data in commits_data
+        ]
 
     def fetch_pr(self, pr_url: str) -> PRInfo:
         owner, repo, number = self.parse_pr_url(pr_url)
